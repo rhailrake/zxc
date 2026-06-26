@@ -140,7 +140,7 @@ public sealed partial class AiSafetyFilter : IAiSafetyFilter
     [GeneratedRegex(@"(?:я\s+(?:большая\s+)?языковая\s+модель|я\s+(?:ии|ai|искусственный\s+интеллект|ассистент|бот)|i\s+am\s+(?:an?\s+)?(?:ai|language\s+model|assistant|bot)|я\s+не\s+фурри|не\s+фурри|стараюсь\s+быть\s+полезн|стараюсь\s+быть\s+безопасн)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PersonaLeakPattern();
 
-    [GeneratedRegex(@"(?:мне\s+\d{1,3}\s+(?:лет|год|года)|я\s+\d{1,3}\s*(?:летн(?:яя|ий|ее)|-?\s*летн(?:яя|ий|ее))|i\s+am\s+\d{1,3}\s+years?\s+old|i'?m\s+\d{1,3}\s+years?\s+old)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:\bя\s+маленьк(?:ая|ий|ое)\b|\bмне\s+(?:\d{1,3}|несколько|пару|мало|много)\s+(?:лет|год|года|месяц(?:ев|а)?|дн(?:ей|я)|недел(?:ь|и|ю)|час(?:ов|а)?)\b|\bя\s+(?:\d{1,3}|несколько|пару)\s*(?:летн(?:яя|ий|ее)|-?\s*летн(?:яя|ий|ее))\b|\bi\s+am\s+(?:\d{1,3}|a\s+few|several)\s+(?:years?|months?|days?|weeks?)\s+old\b|\bi'?m\s+(?:\d{1,3}|a\s+few|several)\s+(?:years?|months?|days?|weeks?)\s+old\b)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AgePattern();
 
     [GeneratedRegex(@"\s+")]
