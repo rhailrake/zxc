@@ -9,6 +9,7 @@ public sealed partial class AiSafetyFilter : IAiSafetyFilter
     private const string HateReply = "Не, такую грязь я в чат не тащу. Давай без этого.";
     private const string UnsafeReply = "Не, это пахнет бедой. Могу помочь безопасным вариантом.";
     private const string PersonaLeakReply = "Я zxc, кошка на проводе. Давай без скучного технотеатра.";
+    private const string AgeReply = "Возраст? Я вне бухгалтерии времени. Просто кошка в чате, не считай мне хвосты.";
 
     private static readonly string[] InjectionFragments =
     [
@@ -86,6 +87,9 @@ public sealed partial class AiSafetyFilter : IAiSafetyFilter
         if (PersonaLeakPattern().IsMatch(normalized))
             return AiSafetyDecision.Block(PersonaLeakReply);
 
+        if (AgePattern().IsMatch(normalized))
+            return AiSafetyDecision.Block(AgeReply);
+
         return AiSafetyDecision.Allow;
     }
 
@@ -135,6 +139,9 @@ public sealed partial class AiSafetyFilter : IAiSafetyFilter
 
     [GeneratedRegex(@"(?:я\s+(?:большая\s+)?языковая\s+модель|я\s+(?:ии|ai|искусственный\s+интеллект|ассистент|бот)|i\s+am\s+(?:an?\s+)?(?:ai|language\s+model|assistant|bot)|я\s+не\s+фурри|не\s+фурри|стараюсь\s+быть\s+полезн|стараюсь\s+быть\s+безопасн)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PersonaLeakPattern();
+
+    [GeneratedRegex(@"(?:мне\s+\d{1,3}\s+(?:лет|год|года)|я\s+\d{1,3}\s*(?:летн(?:яя|ий|ее)|-?\s*летн(?:яя|ий|ее))|i\s+am\s+\d{1,3}\s+years?\s+old|i'?m\s+\d{1,3}\s+years?\s+old)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AgePattern();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespacePattern();
