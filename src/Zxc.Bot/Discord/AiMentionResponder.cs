@@ -9,6 +9,7 @@ namespace Zxc.Bot.Discord;
 public sealed class AiMentionResponder(
     DiscordSocketClient client,
     IAiChatClient aiChatClient,
+    IAiSafetyFilter safetyFilter,
     AiOptions options,
     ILogger<AiMentionResponder> logger)
 {
@@ -78,6 +79,17 @@ public sealed class AiMentionResponder(
 
         if (prompt.Length > options.MaxPromptChars)
             prompt = prompt[..options.MaxPromptChars];
+
+        var safetyDecision = safetyFilter.CheckUserPrompt(prompt);
+        if (!safetyDecision.Allowed)
+        {
+            logger.LogInformation("AI prompt blocked by safety filter. MessageId: {MessageId}.", message.Id);
+            await userMessage.Channel.SendMessageAsync(
+                safetyDecision.Reply,
+                allowedMentions: AllowedMentions.None,
+                messageReference: new MessageReference(userMessage.Id));
+            return;
+        }
 
         try
         {

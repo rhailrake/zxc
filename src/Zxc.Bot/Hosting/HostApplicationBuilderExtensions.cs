@@ -65,6 +65,7 @@ public static class HostApplicationBuilderExtensions
         });
 
         services.AddSingleton<IReplyService, ReplyService>();
+        services.AddSingleton<IAiSafetyFilter, AiSafetyFilter>();
         services.AddSingleton<IRoleAccessStore, RoleAccessStore>();
         services.AddSingleton<IDonatorRoleStore, DonatorRoleStore>();
         services.AddSingleton<IPlayerDiscordLookupService, PlayerDiscordLookupService>();
