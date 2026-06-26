@@ -13,6 +13,7 @@ public sealed class DiscordBotHostedService(
     DiscordLogForwarder logForwarder,
     SlashCommandRegistrar commandRegistrar,
     SlashCommandDispatcher commandDispatcher,
+    AiMentionResponder aiMentionResponder,
     ILogger<DiscordBotHostedService> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -20,6 +21,7 @@ public sealed class DiscordBotHostedService(
         client.Log += logForwarder.ForwardAsync;
         client.Ready += OnReadyAsync;
         client.SlashCommandExecuted += commandDispatcher.HandleAsync;
+        client.MessageReceived += aiMentionResponder.HandleAsync;
 
         await client.LoginAsync(TokenType.Bot, options.Token);
         await client.StartAsync();
@@ -28,6 +30,7 @@ public sealed class DiscordBotHostedService(
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         client.SlashCommandExecuted -= commandDispatcher.HandleAsync;
+        client.MessageReceived -= aiMentionResponder.HandleAsync;
         client.Ready -= OnReadyAsync;
         client.Log -= logForwarder.ForwardAsync;
 

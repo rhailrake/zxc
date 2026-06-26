@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Zxc.Bot.Access;
+using Zxc.Bot.Ai;
 using Zxc.Bot.Api;
 using Zxc.Bot.Auth;
 using Zxc.Bot.Commands;
@@ -36,6 +37,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton(options.DonatorRoles);
         services.AddSingleton(options.Auth);
         services.AddSingleton(options.Api);
+        services.AddSingleton(options.Ai);
         services.AddSingleton(options.Maintenance);
 
         services.AddHttpClient<IAuthApiClient, AuthApiClient>((provider, client) =>
@@ -53,6 +55,15 @@ public static class HostApplicationBuilderExtensions
             client.DefaultRequestHeaders.Add(ApiOptions.ApiKeyHeaderName, apiOptions.Token);
         });
 
+        services.AddHttpClient<IAiChatClient, AiChatClient>((provider, client) =>
+        {
+            var aiOptions = provider.GetRequiredService<AiOptions>();
+            client.BaseAddress = aiOptions.BaseUrl;
+            client.Timeout = aiOptions.Timeout;
+            if (aiOptions.Enabled)
+                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.Token);
+        });
+
         services.AddSingleton<IReplyService, ReplyService>();
         services.AddSingleton<IRoleAccessStore, RoleAccessStore>();
         services.AddSingleton<IDonatorRoleStore, DonatorRoleStore>();
@@ -68,6 +79,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton<SlashCommandRegistrar>();
         services.AddSingleton(DiscordClientFactory.Create());
         services.AddSingleton<DiscordLogForwarder>();
+        services.AddSingleton<AiMentionResponder>();
         services.AddHostedService<DiscordBotHostedService>();
 
         return services;

@@ -18,6 +18,8 @@ public sealed class AppOptions
 
     public required ApiOptions Api { get; init; }
 
+    public required AiOptions Ai { get; init; }
+
     public required MaintenanceOptions Maintenance { get; init; }
 
     public static AppOptions FromEnvironment()
@@ -30,6 +32,7 @@ public sealed class AppOptions
             DonatorRoles = DonatorRoleOptions.FromEnvironment(),
             Auth = AuthOptions.FromEnvironment(),
             Api = ApiOptions.FromEnvironment(),
+            Ai = AiOptions.FromEnvironment(),
             Maintenance = MaintenanceOptions.FromEnvironment(),
         };
     }

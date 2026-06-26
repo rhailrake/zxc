@@ -45,6 +45,21 @@ public static class EnvironmentReader
             : fallback;
     }
 
+    public static int ReadInt(string variable, int fallback, int min, int max)
+    {
+        var value = Environment.GetEnvironmentVariable(variable);
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+
+        if (!int.TryParse(value, out var result))
+            throw new InvalidOperationException($"{variable} must be an integer.");
+
+        if (result < min || result > max)
+            throw new InvalidOperationException($"{variable} must be between {min} and {max}.");
+
+        return result;
+    }
+
     public static HashSet<ulong> ReadUlongSet(string variable)
     {
         var raw = Environment.GetEnvironmentVariable(variable);
