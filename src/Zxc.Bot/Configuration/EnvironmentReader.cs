@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace Zxc.Bot.Configuration;
@@ -56,6 +57,21 @@ public static class EnvironmentReader
 
         if (result < min || result > max)
             throw new InvalidOperationException($"{variable} must be between {min} and {max}.");
+
+        return result;
+    }
+
+    public static double ReadDouble(string variable, double fallback, double min, double max)
+    {
+        var value = Environment.GetEnvironmentVariable(variable);
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
+            throw new InvalidOperationException($"{variable} must be a number.");
+
+        if (result < min || result > max)
+            throw new InvalidOperationException($"{variable} must be between {min.ToString(CultureInfo.InvariantCulture)} and {max.ToString(CultureInfo.InvariantCulture)}.");
 
         return result;
     }
