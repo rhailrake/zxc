@@ -7,6 +7,7 @@ using Zxc.Bot.Auth;
 using Zxc.Bot.Commands;
 using Zxc.Bot.Configuration;
 using Zxc.Bot.Discord;
+using Zxc.Bot.Donators;
 using Zxc.Bot.Execution;
 using Zxc.Bot.Players;
 using Zxc.Bot.Replies;
@@ -32,6 +33,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton(options);
         services.AddSingleton(options.Discord);
         services.AddSingleton(options.Access);
+        services.AddSingleton(options.DonatorRoles);
         services.AddSingleton(options.Auth);
         services.AddSingleton(options.Api);
         services.AddSingleton(options.Maintenance);
@@ -53,6 +55,7 @@ public static class HostApplicationBuilderExtensions
 
         services.AddSingleton<IReplyService, ReplyService>();
         services.AddSingleton<IRoleAccessStore, RoleAccessStore>();
+        services.AddSingleton<IDonatorRoleStore, DonatorRoleStore>();
         services.AddSingleton<IPlayerDiscordLookupService, PlayerDiscordLookupService>();
         services.AddSingleton<IProcessExecutor, ProcessExecutor>();
         services.AddSingleton<IBotMaintenanceService, BotMaintenanceService>();
@@ -60,6 +63,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton<ISlashCommandModule, BotCommandModule>();
         services.AddSingleton<ISlashCommandModule, RoleCommandModule>();
         services.AddSingleton<ISlashCommandModule, DiscordLookupCommandModule>();
+        services.AddSingleton<ISlashCommandModule, DonatorsCommandModule>();
         services.AddSingleton<SlashCommandDispatcher>();
         services.AddSingleton<SlashCommandRegistrar>();
         services.AddSingleton(DiscordClientFactory.Create());

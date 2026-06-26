@@ -9,7 +9,7 @@ public static class DiscordClientFactory
     {
         return new DiscordSocketClient(new DiscordSocketConfig
         {
-            GatewayIntents = GatewayIntents.Guilds,
+            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMembers,
             LogLevel = LogSeverity.Info,
             AlwaysDownloadUsers = false,
         });

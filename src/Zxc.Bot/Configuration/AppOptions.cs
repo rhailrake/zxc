@@ -12,6 +12,8 @@ public sealed class AppOptions
 
     public required AccessOptions Access { get; init; }
 
+    public required DonatorRoleOptions DonatorRoles { get; init; }
+
     public required AuthOptions Auth { get; init; }
 
     public required ApiOptions Api { get; init; }
@@ -25,6 +27,7 @@ public sealed class AppOptions
             LogLevel = EnvironmentReader.ReadLogLevel(LogLevelEnvironmentVariable, LogLevel.Information),
             Discord = DiscordOptions.FromEnvironment(),
             Access = AccessOptions.FromEnvironment(),
+            DonatorRoles = DonatorRoleOptions.FromEnvironment(),
             Auth = AuthOptions.FromEnvironment(),
             Api = ApiOptions.FromEnvironment(),
             Maintenance = MaintenanceOptions.FromEnvironment(),
