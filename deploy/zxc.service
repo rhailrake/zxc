@@ -1,0 +1,16 @@
+[Unit]
+Description=zxc Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=helper
+WorkingDirectory=/opt/zxc
+EnvironmentFile=/etc/zxc/zxc.env
+ExecStart=/usr/bin/dotnet /opt/zxc/Zxc.Bot.dll
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
