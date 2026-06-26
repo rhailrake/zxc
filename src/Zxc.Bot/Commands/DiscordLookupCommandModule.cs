@@ -50,7 +50,7 @@ public sealed class DiscordLookupCommandModule(
             return;
         }
 
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync();
 
         var result = await lookupService.FindByCkeyAsync(ckey, CancellationToken.None);
         await command.ModifyOriginalResponseAsync(message => message.Content = FormatResult(ckey, result));
