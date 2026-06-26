@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using Zxc.Bot.Api;
 using Zxc.Bot.Auth;
@@ -8,6 +9,9 @@ public sealed class PlayerDiscordLookupService(
     IAuthApiClient authApiClient,
     IDeadSpaceApiClient deadSpaceApiClient) : IPlayerDiscordLookupService
 {
+    private static readonly TimeSpan DiscordLookupCacheDuration = TimeSpan.FromMinutes(10);
+    private readonly ConcurrentDictionary<string, CachedCkeyLookup> _discordLookupCache = new();
+
     public async Task<PlayerDiscordLookupResult> FindByCkeyAsync(string ckey, CancellationToken cancellationToken)
     {
         var auth = await authApiClient.QueryByNameAsync(ckey, cancellationToken);
@@ -33,25 +37,40 @@ public sealed class PlayerDiscordLookupService(
 
     public async Task<PlayerCkeyLookupResult> FindByDiscordIdAsync(string discordId, CancellationToken cancellationToken)
     {
+        if (_discordLookupCache.TryGetValue(discordId, out var cached) &&
+            cached.ExpiresAt > DateTimeOffset.UtcNow)
+        {
+            return cached.Result;
+        }
+
         var player = await deadSpaceApiClient.GetAsync<DiscordPlayerInfo>($"discord/{discordId}/", cancellationToken);
         if (player.Success && player.Value != null)
         {
             if (!string.IsNullOrWhiteSpace(player.Value.PlayerUserName))
-                return new PlayerCkeyLookupResult(CkeyLookupStatus.Found, player.Value, null);
+                return Cache(discordId, new PlayerCkeyLookupResult(CkeyLookupStatus.Found, player.Value, null));
 
             var auth = await authApiClient.QueryByUserIdAsync(player.Value.Ss14PlayerId, cancellationToken);
             var playerUserName = auth.User?.UserName;
 
-            return new PlayerCkeyLookupResult(
+            return Cache(discordId, new PlayerCkeyLookupResult(
                 CkeyLookupStatus.Found,
                 player.Value with { PlayerUserName = playerUserName },
-                null);
+                null));
         }
 
         var status = player.StatusCode == HttpStatusCode.NotFound
             ? CkeyLookupStatus.DiscordNotLinked
             : CkeyLookupStatus.Failed;
 
-        return new PlayerCkeyLookupResult(status, null, player.Error);
+        return Cache(discordId, new PlayerCkeyLookupResult(status, null, player.Error));
+    }
+
+    private PlayerCkeyLookupResult Cache(string discordId, PlayerCkeyLookupResult result)
+    {
+        _discordLookupCache[discordId] = new CachedCkeyLookup(
+            result,
+            DateTimeOffset.UtcNow + DiscordLookupCacheDuration);
+
+        return result;
     }
 }

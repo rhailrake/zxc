@@ -13,7 +13,8 @@ public sealed class DonatorsCommandModule(
     CommandAccessService accessService,
     IReplyService replies) : ISlashCommandModule
 {
-    private const int DiscordMessageLimit = 1900;
+    private const int DiscordEmbedDescriptionLimit = 4096;
+    private const int MaxConcurrentLookups = 12;
 
     public string Name => "donators";
 
@@ -179,18 +180,17 @@ public sealed class DonatorsCommandModule(
             return;
         }
 
-        var chunks = BuildChunks(lines);
-        await command.ModifyOriginalResponseAsync(message => message.Content = replies.Format(ReplyKind.Success, chunks[0]));
-
-        foreach (var chunk in chunks.Skip(1))
+        var embed = BuildDonatorEmbed(lines);
+        await command.ModifyOriginalResponseAsync(message =>
         {
-            await command.FollowupAsync(chunk);
-        }
+            message.Content = replies.Pick(ReplyKind.Success);
+            message.Embed = embed;
+        });
     }
 
     private async Task<List<string>> BuildDonatorLinesAsync(SocketGuild guild, IReadOnlyCollection<ulong> roleIds)
     {
-        var lines = new List<string>();
+        var entries = new List<DonatorListEntry>();
         var seen = new HashSet<(ulong RoleId, ulong UserId)>();
 
         foreach (var roleId in roleIds)
@@ -205,38 +205,80 @@ public sealed class DonatorsCommandModule(
                 if (!seen.Add((roleId, member.Id)))
                     continue;
 
-                var lookup = await lookupService.FindByDiscordIdAsync(member.Id.ToString(), CancellationToken.None);
+                entries.Add(new DonatorListEntry(role, member));
+            }
+        }
+
+        var ckeys = await FetchCkeysAsync(entries.Select(entry => entry.Member.Id).Distinct().ToArray());
+
+        return entries
+            .Select(entry => $"{entry.Role.Mention}: {entry.Member.Mention} - {ckeys[entry.Member.Id]}")
+            .ToList();
+    }
+
+    private async Task<Dictionary<ulong, string>> FetchCkeysAsync(IReadOnlyCollection<ulong> userIds)
+    {
+        using var semaphore = new SemaphoreSlim(MaxConcurrentLookups);
+        var tasks = userIds.Select(async userId =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                var lookup = await lookupService.FindByDiscordIdAsync(userId.ToString(), CancellationToken.None);
                 var ckey = lookup.Player?.PlayerUserName;
                 if (string.IsNullOrWhiteSpace(ckey))
                     ckey = "unknown";
 
-                lines.Add($"{role.Mention}: {member.Mention} - {ckey}");
+                return new KeyValuePair<ulong, string>(userId, ckey);
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
 
-        return lines;
+        var results = await Task.WhenAll(tasks);
+        return results.ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
-    private static List<string> BuildChunks(IReadOnlyCollection<string> lines)
+    private static Embed BuildDonatorEmbed(IReadOnlyCollection<string> lines)
     {
-        var chunks = new List<string>();
+        var (description, hiddenCount) = BuildEmbedDescription(lines);
+        var builder = new EmbedBuilder()
+            .WithTitle("Donators")
+            .WithDescription(description)
+            .WithColor(new Color(255, 196, 0))
+            .WithCurrentTimestamp();
+
+        if (hiddenCount > 0)
+            builder.WithFooter($"+{hiddenCount} more");
+
+        return builder.Build();
+    }
+
+    private static (string Description, int HiddenCount) BuildEmbedDescription(IReadOnlyCollection<string> lines)
+    {
         var builder = new StringBuilder();
+        var includedCount = 0;
 
         foreach (var line in lines)
         {
-            if (builder.Length + line.Length + 1 > DiscordMessageLimit && builder.Length > 0)
-            {
-                chunks.Add(builder.ToString().TrimEnd());
-                builder.Clear();
-            }
+            var lineValue = line.Length > DiscordEmbedDescriptionLimit
+                ? line[..(DiscordEmbedDescriptionLimit - 3)] + "..."
+                : line;
 
-            builder.AppendLine(line);
+            var separatorLength = builder.Length == 0 ? 0 : Environment.NewLine.Length;
+            if (builder.Length + separatorLength + lineValue.Length > DiscordEmbedDescriptionLimit)
+                break;
+
+            if (builder.Length > 0)
+                builder.AppendLine();
+
+            builder.Append(lineValue);
+            includedCount++;
         }
 
-        if (builder.Length > 0)
-            chunks.Add(builder.ToString().TrimEnd());
-
-        return chunks;
+        return (builder.ToString(), lines.Count - includedCount);
     }
 
     private static ulong ReadRoleId(SocketSlashCommandDataOption subCommand)
@@ -252,4 +294,8 @@ public sealed class DonatorsCommandModule(
 
         return roleId;
     }
+
+    private sealed record DonatorListEntry(
+        SocketRole Role,
+        SocketGuildUser Member);
 }
