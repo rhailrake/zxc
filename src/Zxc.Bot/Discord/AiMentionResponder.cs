@@ -48,12 +48,15 @@ public sealed class AiMentionResponder(
         if (string.IsNullOrWhiteSpace(mentionedUserIds))
             mentionedUserIds = "<none>";
 
-        var botMentioned = userMessage.MentionedUsers.Any(user => user.Id == client.CurrentUser.Id);
+        var botMentionedByUsers = userMessage.MentionedUsers.Any(user => user.Id == client.CurrentUser.Id);
+        var botMentionedByRawContent = ContainsBotMention(userMessage.Content, client.CurrentUser.Id);
+        var botMentioned = botMentionedByUsers || botMentionedByRawContent;
         logger.LogInformation(
-            "AI mention check. MessageId: {MessageId}. BotUserId: {BotUserId}. MentionedUsers: {MentionedUsers}. BotMentioned: {BotMentioned}.",
+            "AI mention check. MessageId: {MessageId}. BotUserId: {BotUserId}. MentionedUsers: {MentionedUsers}. RawBotMention: {RawBotMention}. BotMentioned: {BotMentioned}.",
             message.Id,
             client.CurrentUser.Id,
             mentionedUserIds,
+            botMentionedByRawContent,
             botMentioned);
 
         if (!botMentioned)
@@ -93,5 +96,11 @@ public sealed class AiMentionResponder(
             .Replace($"<@{botUserId}>", string.Empty, StringComparison.Ordinal)
             .Replace($"<@!{botUserId}>", string.Empty, StringComparison.Ordinal)
             .Trim();
+    }
+
+    private static bool ContainsBotMention(string content, ulong botUserId)
+    {
+        return content.Contains($"<@{botUserId}>", StringComparison.Ordinal)
+            || content.Contains($"<@!{botUserId}>", StringComparison.Ordinal);
     }
 }
