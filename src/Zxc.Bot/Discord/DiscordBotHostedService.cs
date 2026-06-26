@@ -48,9 +48,10 @@ public sealed class DiscordBotHostedService(
         }
     }
 
-    private Task OnReadyAsync()
+    private async Task OnReadyAsync()
     {
         logger.LogInformation("Logged in as {Username} ({UserId}).", client.CurrentUser.Username, client.CurrentUser.Id);
-        return commandRegistrar.RegisterAsync();
+        await client.SetStatusAsync(UserStatus.Invisible);
+        await commandRegistrar.RegisterAsync();
     }
 }
