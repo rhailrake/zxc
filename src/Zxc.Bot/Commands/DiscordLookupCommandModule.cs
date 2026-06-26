@@ -27,22 +27,49 @@ public sealed class DiscordLookupCommandModule(
                 .WithMinLength(1)
                 .WithMaxLength(64));
 
+        var ckey = new SlashCommandOptionBuilder()
+            .WithName("ckey")
+            .WithDescription("Find SS14 ckey by Discord user")
+            .WithType(ApplicationCommandOptionType.SubCommand)
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("user")
+                .WithDescription("Discord user")
+                .WithType(ApplicationCommandOptionType.User)
+                .WithRequired(true));
+
         return new SlashCommandBuilder()
             .WithName(Name)
             .WithDescription("Discord lookup")
             .AddOption(find)
+            .AddOption(ckey)
             .Build();
     }
 
     public async Task HandleAsync(SocketSlashCommand command)
     {
         var subCommand = command.Data.Options.FirstOrDefault();
-        if (subCommand?.Name != "find")
+        if (subCommand == null)
         {
             await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
             return;
         }
 
+        switch (subCommand.Name)
+        {
+            case "find":
+                await HandleFindAsync(command, subCommand);
+                return;
+            case "ckey":
+                await HandleCkeyAsync(command, subCommand);
+                return;
+            default:
+                await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
+                return;
+        }
+    }
+
+    private async Task HandleFindAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
+    {
         var ckey = ReadString(subCommand, "ckey").Trim();
         if (string.IsNullOrWhiteSpace(ckey))
         {
@@ -56,12 +83,22 @@ public sealed class DiscordLookupCommandModule(
         await command.ModifyOriginalResponseAsync(message => message.Content = FormatResult(ckey, result));
     }
 
+    private async Task HandleCkeyAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
+    {
+        var user = ReadUser(subCommand, "user");
+
+        await command.DeferAsync();
+
+        var result = await lookupService.FindByDiscordIdAsync(user.Id.ToString(), CancellationToken.None);
+        await command.ModifyOriginalResponseAsync(message => message.Content = FormatResult(user, result));
+    }
+
     private string FormatResult(string ckey, PlayerDiscordLookupResult result)
     {
         return result.Status switch
         {
             DiscordLookupStatus.Found when result.Player != null && result.Discord != null =>
-                replies.Format(ReplyKind.Success, FormatFound(result.Player.UserName, result.Player.UserId, result.Discord)),
+                replies.Format(ReplyKind.Success, $"<@{result.Discord.DiscordId}>"),
             DiscordLookupStatus.PlayerNotFound =>
                 replies.Format(ReplyKind.Empty, $"Player `{ckey}` not found."),
             DiscordLookupStatus.DiscordNotLinked when result.Player != null =>
@@ -70,15 +107,23 @@ public sealed class DiscordLookupCommandModule(
         };
     }
 
-    private static string FormatFound(string userName, Guid ss14UserId, DiscordLinkInfo discord)
+    private string FormatResult(IUser user, PlayerCkeyLookupResult result)
     {
-        return $"""
-            Player: `{userName}`
-            SS14 ID: `{ss14UserId}`
-            Discord: <@{discord.DiscordId}>
-            Discord username: `{discord.DiscordUsername}`
-            Discord ID: `{discord.DiscordId}`
-            """;
+        return result.Status switch
+        {
+            CkeyLookupStatus.Found when result.Player != null =>
+                replies.Format(ReplyKind.Success, FormatCkey(result.Player)),
+            CkeyLookupStatus.DiscordNotLinked =>
+                replies.Format(ReplyKind.Empty, $"{user.Mention} has no linked SS14 account."),
+            _ => replies.Format(ReplyKind.Error, "Lookup failed."),
+        };
+    }
+
+    private static string FormatCkey(DiscordPlayerInfo player)
+    {
+        return string.IsNullOrWhiteSpace(player.PlayerUserName)
+            ? "unknown"
+            : player.PlayerUserName;
     }
 
     private static string ReadString(SocketSlashCommandDataOption subCommand, string optionName)
@@ -87,6 +132,15 @@ public sealed class DiscordLookupCommandModule(
             ?? throw new InvalidOperationException($"{optionName} option is missing.");
 
         return option.Value as string
+            ?? throw new InvalidOperationException($"{optionName} option is invalid.");
+    }
+
+    private static IUser ReadUser(SocketSlashCommandDataOption subCommand, string optionName)
+    {
+        var option = subCommand.Options.FirstOrDefault(option => option.Name == optionName)
+            ?? throw new InvalidOperationException($"{optionName} option is missing.");
+
+        return option.Value as IUser
             ?? throw new InvalidOperationException($"{optionName} option is invalid.");
     }
 }

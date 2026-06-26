@@ -30,4 +30,17 @@ public sealed class PlayerDiscordLookupService(
 
         return new PlayerDiscordLookupResult(discordStatus, auth.User, null, discord.Error);
     }
+
+    public async Task<PlayerCkeyLookupResult> FindByDiscordIdAsync(string discordId, CancellationToken cancellationToken)
+    {
+        var player = await deadSpaceApiClient.GetAsync<DiscordPlayerInfo>($"discord/{discordId}/", cancellationToken);
+        if (player.Success && player.Value != null)
+            return new PlayerCkeyLookupResult(CkeyLookupStatus.Found, player.Value, null);
+
+        var status = player.StatusCode == HttpStatusCode.NotFound
+            ? CkeyLookupStatus.DiscordNotLinked
+            : CkeyLookupStatus.Failed;
+
+        return new PlayerCkeyLookupResult(status, null, player.Error);
+    }
 }
