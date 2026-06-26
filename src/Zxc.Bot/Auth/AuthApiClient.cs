@@ -6,7 +6,16 @@ public sealed class AuthApiClient(HttpClient httpClient) : IAuthApiClient
 {
     public async Task<AuthQueryResult> QueryByNameAsync(string name, CancellationToken cancellationToken)
     {
-        var endpoint = $"query/name?name={Uri.EscapeDataString(name)}";
+        return await QueryAsync($"query/name?name={Uri.EscapeDataString(name)}", cancellationToken);
+    }
+
+    public async Task<AuthQueryResult> QueryByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await QueryAsync($"query/userid?userid={Uri.EscapeDataString(userId.ToString())}", cancellationToken);
+    }
+
+    private async Task<AuthQueryResult> QueryAsync(string endpoint, CancellationToken cancellationToken)
+    {
         using var response = await httpClient.GetAsync(endpoint, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
 

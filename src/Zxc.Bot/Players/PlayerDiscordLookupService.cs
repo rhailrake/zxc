@@ -35,7 +35,18 @@ public sealed class PlayerDiscordLookupService(
     {
         var player = await deadSpaceApiClient.GetAsync<DiscordPlayerInfo>($"discord/{discordId}/", cancellationToken);
         if (player.Success && player.Value != null)
-            return new PlayerCkeyLookupResult(CkeyLookupStatus.Found, player.Value, null);
+        {
+            if (!string.IsNullOrWhiteSpace(player.Value.PlayerUserName))
+                return new PlayerCkeyLookupResult(CkeyLookupStatus.Found, player.Value, null);
+
+            var auth = await authApiClient.QueryByUserIdAsync(player.Value.Ss14PlayerId, cancellationToken);
+            var playerUserName = auth.User?.UserName;
+
+            return new PlayerCkeyLookupResult(
+                CkeyLookupStatus.Found,
+                player.Value with { PlayerUserName = playerUserName },
+                null);
+        }
 
         var status = player.StatusCode == HttpStatusCode.NotFound
             ? CkeyLookupStatus.DiscordNotLinked
