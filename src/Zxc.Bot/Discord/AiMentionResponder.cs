@@ -14,19 +14,49 @@ public sealed class AiMentionResponder(
 {
     public async Task HandleAsync(SocketMessage message)
     {
+        logger.LogInformation(
+            "AI message event. MessageId: {MessageId}. AuthorId: {AuthorId}. AuthorIsBot: {AuthorIsBot}. ChannelId: {ChannelId}. MessageType: {MessageType}. ContentLength: {ContentLength}.",
+            message.Id,
+            message.Author.Id,
+            message.Author.IsBot,
+            message.Channel.Id,
+            message.GetType().Name,
+            message.Content?.Length ?? 0);
+
         if (!options.Enabled)
+        {
+            logger.LogInformation("AI message ignored because AI is disabled. MessageId: {MessageId}.", message.Id);
             return;
+        }
 
         if (message.Author.IsBot)
             return;
 
         if (client.CurrentUser == null)
+        {
+            logger.LogInformation("AI message ignored because current user is not ready. MessageId: {MessageId}.", message.Id);
             return;
+        }
 
         if (message is not SocketUserMessage userMessage)
+        {
+            logger.LogInformation("AI message ignored because it is not a user message. MessageId: {MessageId}.", message.Id);
             return;
+        }
 
-        if (!userMessage.MentionedUsers.Any(user => user.Id == client.CurrentUser.Id))
+        var mentionedUserIds = string.Join(',', userMessage.MentionedUsers.Select(user => user.Id));
+        if (string.IsNullOrWhiteSpace(mentionedUserIds))
+            mentionedUserIds = "<none>";
+
+        var botMentioned = userMessage.MentionedUsers.Any(user => user.Id == client.CurrentUser.Id);
+        logger.LogInformation(
+            "AI mention check. MessageId: {MessageId}. BotUserId: {BotUserId}. MentionedUsers: {MentionedUsers}. BotMentioned: {BotMentioned}.",
+            message.Id,
+            client.CurrentUser.Id,
+            mentionedUserIds,
+            botMentioned);
+
+        if (!botMentioned)
             return;
 
         var prompt = BuildPrompt(userMessage.Content, client.CurrentUser.Id);
@@ -38,6 +68,8 @@ public sealed class AiMentionResponder(
 
         try
         {
+            logger.LogInformation("AI request started. MessageId: {MessageId}. PromptLength: {PromptLength}.", message.Id, prompt.Length);
+
             using var typing = userMessage.Channel.EnterTypingState();
             using var timeout = new CancellationTokenSource(options.Timeout);
             var reply = await aiChatClient.CreateReplyAsync(prompt, timeout.Token) ?? "Мяу...";
@@ -46,6 +78,8 @@ public sealed class AiMentionResponder(
                 reply,
                 allowedMentions: AllowedMentions.None,
                 messageReference: new MessageReference(userMessage.Id));
+
+            logger.LogInformation("AI reply sent. MessageId: {MessageId}. ReplyLength: {ReplyLength}.", message.Id, reply.Length);
         }
         catch (Exception e)
         {
