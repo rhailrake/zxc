@@ -9,6 +9,7 @@ namespace Zxc.Bot.Discord;
 
 public sealed class DiscordBotHostedService(
     DiscordOptions options,
+    AiOptions aiOptions,
     DiscordSocketClient client,
     DiscordLogForwarder logForwarder,
     SlashCommandRegistrar commandRegistrar,
@@ -18,6 +19,8 @@ public sealed class DiscordBotHostedService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("AI mention responder is {State}. Model: {Model}.", aiOptions.Enabled ? "enabled" : "disabled", aiOptions.Model);
+
         client.Log += logForwarder.ForwardAsync;
         client.Ready += OnReadyAsync;
         client.SlashCommandExecuted += commandDispatcher.HandleAsync;

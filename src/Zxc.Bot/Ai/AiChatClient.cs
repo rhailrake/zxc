@@ -1,4 +1,6 @@
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Zxc.Bot.Configuration;
 
@@ -28,15 +30,19 @@ public sealed class AiChatClient(
 
         try
         {
-            using var response = await httpClient.PostAsJsonAsync("chat/completions", request, AiJson.Options, cancellationToken);
-            var completion = await response.Content.ReadFromJsonAsync<AiChatResponse>(AiJson.Options, cancellationToken);
+            using var requestContent = new StringContent(JsonSerializer.Serialize(request, AiJson.Options), Encoding.UTF8);
+            requestContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            using var response = await httpClient.PostAsync("chat/completions", requestContent, cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("AI request failed with status {StatusCode}.", response.StatusCode);
+                logger.LogWarning("AI request failed with status {StatusCode}: {Response}", response.StatusCode, TrimForLog(responseContent));
                 return null;
             }
 
+            var completion = JsonSerializer.Deserialize<AiChatResponse>(responseContent, AiJson.Options);
             var content = completion?.Choices.FirstOrDefault()?.Message.Content;
             if (string.IsNullOrWhiteSpace(content))
                 return "Мяу...";
@@ -62,5 +68,11 @@ public sealed class AiChatClient(
             .Replace("@here", "@\u200bhere", StringComparison.OrdinalIgnoreCase)
             .Replace("<@", "<@\u200b", StringComparison.Ordinal)
             .Replace("<#", "<#\u200b", StringComparison.Ordinal);
+    }
+
+    private static string TrimForLog(string content)
+    {
+        content = content.Trim();
+        return content.Length <= 500 ? content : content[..500];
     }
 }
