@@ -1,15 +1,11 @@
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using Zxc.Bot.Ai;
-using Zxc.Bot.Configuration;
 
 namespace Zxc.Bot.Discord;
 
 public sealed class AiMentionResponder(
     DiscordSocketClient client,
-    IAiChatClient aiChatClient,
-    AiOptions options,
     ILogger<AiMentionResponder> logger)
 {
     public async Task HandleAsync(SocketMessage message)
@@ -26,12 +22,6 @@ public sealed class AiMentionResponder(
             message.GetType().Name,
             message.Content?.Length ?? 0,
             BuildContentPreview(message.Content));
-
-        if (!options.Enabled)
-        {
-            logger.LogInformation("AI message ignored because AI is disabled. MessageId: {MessageId}.", message.Id);
-            return;
-        }
 
         if (message.Author.IsBot)
             return;
@@ -72,15 +62,23 @@ public sealed class AiMentionResponder(
         if (!botMentioned)
             return;
 
-        var prompt = BuildPrompt(userMessage.Content, client.CurrentUser.Id, client.CurrentUser.Username);
-        if (string.IsNullOrWhiteSpace(prompt))
-            prompt = "Скажи что-нибудь короткое и милое.";
-
-        if (prompt.Length > options.MaxPromptChars)
-            prompt = prompt[..options.MaxPromptChars];
-
         try
         {
+            await userMessage.Channel.SendMessageAsync(
+                "привет!",
+                allowedMentions: AllowedMentions.None,
+                messageReference: new MessageReference(userMessage.Id));
+
+            logger.LogInformation("Mention greeting sent. MessageId: {MessageId}.", message.Id);
+
+            /*
+            var prompt = BuildPrompt(userMessage.Content, client.CurrentUser.Id, client.CurrentUser.Username);
+            if (string.IsNullOrWhiteSpace(prompt))
+                prompt = "Скажи что-нибудь короткое и милое.";
+
+            if (prompt.Length > options.MaxPromptChars)
+                prompt = prompt[..options.MaxPromptChars];
+
             logger.LogInformation("AI request started. MessageId: {MessageId}. PromptLength: {PromptLength}.", message.Id, prompt.Length);
 
             using var typing = userMessage.Channel.EnterTypingState();
@@ -93,6 +91,7 @@ public sealed class AiMentionResponder(
                 messageReference: new MessageReference(userMessage.Id));
 
             logger.LogInformation("AI reply sent. MessageId: {MessageId}. ReplyLength: {ReplyLength}.", message.Id, reply.Length);
+            */
         }
         catch (Exception e)
         {
