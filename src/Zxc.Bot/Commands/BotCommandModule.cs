@@ -11,7 +11,7 @@ public sealed class BotCommandModule(
     IReplyService replies,
     ILogger<BotCommandModule> logger) : ISlashCommandModule
 {
-    public string Name => "bot";
+    public string Name => SlashCommandNames.Bot;
 
     public SlashCommandAccess Access => SlashCommandAccess.Role;
 

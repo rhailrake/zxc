@@ -9,7 +9,7 @@ public sealed class DiscordLookupCommandModule(
     IPlayerDiscordLookupService lookupService,
     IReplyService replies) : ISlashCommandModule
 {
-    public string Name => "discord";
+    public string Name => SlashCommandNames.Discord;
 
     public SlashCommandAccess Access => SlashCommandAccess.Role;
 

@@ -10,7 +10,7 @@ public sealed class AccessOptions
     {
         return new AccessOptions
         {
-            StorePath = EnvironmentReader.ReadString(StorePathEnvironmentVariable, "/opt/zxc/access.json"),
+            StorePath = EnvironmentReader.ReadString(StorePathEnvironmentVariable, "/opt/zxc/command-access.json"),
         };
     }
 }

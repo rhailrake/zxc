@@ -62,8 +62,8 @@ public sealed class SlashCommandDispatcher
     {
         return module.Access switch
         {
-            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(command.User, CancellationToken.None),
-            SlashCommandAccess.Role => _accessService.CanUseAsync(command.User, CancellationToken.None),
+            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(command.User, module.Name, CancellationToken.None),
+            SlashCommandAccess.Role => _accessService.CanUseAsync(command.User, module.Name, CancellationToken.None),
             _ => Task.FromResult(false),
         };
     }

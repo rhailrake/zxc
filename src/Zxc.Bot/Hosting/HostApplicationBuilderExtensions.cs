@@ -10,6 +10,7 @@ using Zxc.Bot.Configuration;
 using Zxc.Bot.Discord;
 using Zxc.Bot.Donators;
 using Zxc.Bot.Execution;
+using Zxc.Bot.GameServers;
 using Zxc.Bot.Players;
 using Zxc.Bot.Replies;
 using Zxc.Bot.SelfUpdate;
@@ -35,6 +36,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton(options.Discord);
         services.AddSingleton(options.Access);
         services.AddSingleton(options.DonatorRoles);
+        services.AddSingleton(options.GameServers);
         services.AddSingleton(options.Auth);
         services.AddSingleton(options.Api);
         services.AddSingleton(options.Ai);
@@ -64,15 +66,23 @@ public static class HostApplicationBuilderExtensions
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.Token);
         });
 
+        services.AddHttpClient<IGameServerApiClient, GameServerApiClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+
         services.AddSingleton<IReplyService, ReplyService>();
         services.AddSingleton<IRoleAccessStore, RoleAccessStore>();
         services.AddSingleton<IDonatorRoleStore, DonatorRoleStore>();
+        services.AddSingleton<IGameServerStore, GameServerStore>();
         services.AddSingleton<IPlayerDiscordLookupService, PlayerDiscordLookupService>();
         services.AddSingleton<IProcessExecutor, ProcessExecutor>();
         services.AddSingleton<IBotMaintenanceService, BotMaintenanceService>();
         services.AddSingleton<CommandAccessService>();
+        services.AddSingleton<ISlashCommandModule, AdminsCommandModule>();
         services.AddSingleton<ISlashCommandModule, BotCommandModule>();
         services.AddSingleton<ISlashCommandModule, RoleCommandModule>();
+        services.AddSingleton<ISlashCommandModule, ServerCommandModule>();
         services.AddSingleton<ISlashCommandModule, DiscordLookupCommandModule>();
         services.AddSingleton<ISlashCommandModule, DonatorsCommandModule>();
         services.AddSingleton<SlashCommandDispatcher>();

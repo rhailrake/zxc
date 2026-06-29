@@ -14,6 +14,8 @@ public sealed class AppOptions
 
     public required DonatorRoleOptions DonatorRoles { get; init; }
 
+    public required GameServerOptions GameServers { get; init; }
+
     public required AuthOptions Auth { get; init; }
 
     public required ApiOptions Api { get; init; }
@@ -30,6 +32,7 @@ public sealed class AppOptions
             Discord = DiscordOptions.FromEnvironment(),
             Access = AccessOptions.FromEnvironment(),
             DonatorRoles = DonatorRoleOptions.FromEnvironment(),
+            GameServers = GameServerOptions.FromEnvironment(),
             Auth = AuthOptions.FromEnvironment(),
             Api = ApiOptions.FromEnvironment(),
             Ai = AiOptions.FromEnvironment(),

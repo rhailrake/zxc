@@ -16,7 +16,7 @@ public sealed class DonatorsCommandModule(
     private const int DiscordEmbedDescriptionLimit = 4096;
     private const int MaxConcurrentLookups = 12;
 
-    public string Name => "donators";
+    public string Name => SlashCommandNames.Donators;
 
     public SlashCommandAccess Access => SlashCommandAccess.Role;
 
@@ -104,7 +104,7 @@ public sealed class DonatorsCommandModule(
 
     private async Task HandleAddRoleAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        if (!await accessService.CanManageAccessAsync(command.User, CancellationToken.None))
+        if (!await accessService.CanManageAccessAsync(command.User, Name, CancellationToken.None))
         {
             await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
             return;
@@ -127,7 +127,7 @@ public sealed class DonatorsCommandModule(
 
     private async Task HandleRemoveRoleAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        if (!await accessService.CanManageAccessAsync(command.User, CancellationToken.None))
+        if (!await accessService.CanManageAccessAsync(command.User, Name, CancellationToken.None))
         {
             await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
             return;

@@ -7,9 +7,10 @@ namespace Zxc.Bot.Commands;
 
 public sealed class RoleCommandModule(
     IRoleAccessStore roleAccessStore,
+    CommandAccessService accessService,
     IReplyService replies) : ISlashCommandModule
 {
-    public string Name => "roles";
+    public string Name => SlashCommandNames.Roles;
 
     public SlashCommandAccess Access => SlashCommandAccess.Manager;
 
@@ -21,30 +22,56 @@ public sealed class RoleCommandModule(
             .WithType(ApplicationCommandOptionType.Role)
             .WithRequired(true);
 
+        var commandOption = new SlashCommandOptionBuilder()
+            .WithName("command")
+            .WithDescription("Command")
+            .WithType(ApplicationCommandOptionType.String)
+            .WithRequired(true);
+
+        foreach (var commandName in SlashCommandNames.All)
+            commandOption.AddChoice(commandName, commandName);
+
         var add = new SlashCommandOptionBuilder()
             .WithName("add")
-            .WithDescription("Allow role to use bot commands")
+            .WithDescription("Allow role to use a command")
             .WithType(ApplicationCommandOptionType.SubCommand)
+            .AddOption(CloneCommandOption(required: true))
             .AddOption(CloneRoleOption());
 
         var remove = new SlashCommandOptionBuilder()
             .WithName("remove")
-            .WithDescription("Remove role from bot access")
+            .WithDescription("Remove role from command access")
             .WithType(ApplicationCommandOptionType.SubCommand)
+            .AddOption(CloneCommandOption(required: true))
             .AddOption(CloneRoleOption());
 
         var list = new SlashCommandOptionBuilder()
             .WithName("list")
-            .WithDescription("Show roles allowed to use bot commands")
-            .WithType(ApplicationCommandOptionType.SubCommand);
+            .WithDescription("Show command access roles")
+            .WithType(ApplicationCommandOptionType.SubCommand)
+            .AddOption(CloneCommandOption(required: false));
 
         return new SlashCommandBuilder()
             .WithName(Name)
-            .WithDescription("Bot access roles")
+            .WithDescription("Command access roles")
             .AddOption(add)
             .AddOption(remove)
             .AddOption(list)
             .Build();
+
+        SlashCommandOptionBuilder CloneCommandOption(bool required)
+        {
+            var option = new SlashCommandOptionBuilder()
+                .WithName(commandOption.Name)
+                .WithDescription(commandOption.Description)
+                .WithType(commandOption.Type)
+                .WithRequired(required);
+
+            foreach (var commandName in SlashCommandNames.All)
+                option.AddChoice(commandName, commandName);
+
+            return option;
+        }
 
         SlashCommandOptionBuilder CloneRoleOption()
         {
@@ -74,7 +101,7 @@ public sealed class RoleCommandModule(
                 await HandleRemoveAsync(command, subCommand);
                 return;
             case "list":
-                await HandleListAsync(command);
+                await HandleListAsync(command, subCommand);
                 return;
             default:
                 await command.RespondAsync(replies.Format(ReplyKind.Denied, "Unknown roles command."), ephemeral: true);
@@ -84,37 +111,86 @@ public sealed class RoleCommandModule(
 
     private async Task HandleAddAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
+        if (!TryReadCommandName(subCommand, out var commandName))
+        {
+            await command.RespondAsync(replies.Format(ReplyKind.Empty, "Unknown command."), ephemeral: true);
+            return;
+        }
+
         var role = ReadRole(subCommand);
-        var added = await roleAccessStore.AddRoleAsync(role.Id, CancellationToken.None);
+        var added = await roleAccessStore.AddRoleAsync(commandName, role.Id, CancellationToken.None);
         var details = added
-            ? $"Added {role.Mention}."
-            : $"{role.Mention} is already allowed.";
+            ? $"Added {role.Mention} to `/{commandName}`."
+            : $"{role.Mention} is already allowed for `/{commandName}`.";
 
         await command.RespondAsync(replies.Format(ReplyKind.Success, details), ephemeral: true);
     }
 
     private async Task HandleRemoveAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
+        if (!TryReadCommandName(subCommand, out var commandName))
+        {
+            await command.RespondAsync(replies.Format(ReplyKind.Empty, "Unknown command."), ephemeral: true);
+            return;
+        }
+
         var role = ReadRole(subCommand);
-        var removed = await roleAccessStore.RemoveRoleAsync(role.Id, CancellationToken.None);
+        var removed = await roleAccessStore.RemoveRoleAsync(commandName, role.Id, CancellationToken.None);
         var details = removed
-            ? $"Removed {role.Mention}."
-            : $"{role.Mention} was not in the stored role list.";
+            ? $"Removed {role.Mention} from `/{commandName}`."
+            : $"{role.Mention} was not allowed for `/{commandName}`.";
 
         await command.RespondAsync(replies.Format(removed ? ReplyKind.Success : ReplyKind.Empty, details), ephemeral: true);
     }
 
-    private async Task HandleListAsync(SocketSlashCommand command)
+    private async Task HandleListAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        var roleIds = await roleAccessStore.GetAllowedRoleIdsAsync(CancellationToken.None);
-        if (roleIds.Count == 0)
+        var commandOption = subCommand.Options.FirstOrDefault(option => option.Name == "command");
+        if (commandOption != null)
         {
-            await command.RespondAsync(replies.Format(ReplyKind.Empty), ephemeral: true);
+            if (!TryReadCommandName(subCommand, out var commandName))
+            {
+                await command.RespondAsync(replies.Format(ReplyKind.Empty, "Unknown command."), ephemeral: true);
+                return;
+            }
+
+            var roleIds = await accessService.GetEffectiveRoleIdsAsync(commandName, CancellationToken.None);
+            var commandDetails = roleIds.Count == 0
+                ? $"`/{commandName}`: none"
+                : $"`/{commandName}`:\n{FormatRoleIds(roleIds)}";
+
+            await command.RespondAsync(replies.Format(roleIds.Count == 0 ? ReplyKind.Empty : ReplyKind.Success, commandDetails), ephemeral: true);
             return;
         }
 
-        var details = string.Join("\n", roleIds.Select(roleId => $"<@&{roleId}> (`{roleId}`)"));
-        await command.RespondAsync(replies.Format(ReplyKind.Success, details), ephemeral: true);
+        var lines = new List<string>();
+        foreach (var commandName in SlashCommandNames.All)
+        {
+            var roleIds = await accessService.GetEffectiveRoleIdsAsync(commandName, CancellationToken.None);
+            var roles = roleIds.Count == 0
+                ? "none"
+                : string.Join(", ", roleIds.Select(roleId => $"<@&{roleId}> (`{roleId}`)"));
+
+            lines.Add($"`/{commandName}`: {roles}");
+        }
+
+        var allDetails = string.Join("\n", lines);
+        await command.RespondAsync(replies.Format(ReplyKind.Success, allDetails), ephemeral: true);
+    }
+
+    private static bool TryReadCommandName(SocketSlashCommandDataOption subCommand, out string commandName)
+    {
+        var option = subCommand.Options.FirstOrDefault(option => option.Name == "command");
+        if (option?.Value is string raw && SlashCommandNames.TryNormalize(raw, out commandName))
+            return true;
+
+        commandName = string.Empty;
+        return false;
+    }
+
+    private static string FormatRoleIds(IEnumerable<ulong> roleIds)
+    {
+        return string.Join("\n", roleIds.Select(roleId => $"<@&{roleId}> (`{roleId}`)"));
     }
 
     private static IRole ReadRole(SocketSlashCommandDataOption subCommand)
