@@ -33,6 +33,26 @@ public sealed class GameServerApiClient(HttpClient httpClient) : IGameServerApiC
         return GetAsync<GameServerPlaytimeJobsResponse>(server, "/admin/playtime/jobs", cancellationToken);
     }
 
+    public Task<ApiResult<GameServerRoundStatsResponse>> GetRoundStatsAsync(
+        GameServerRecord server,
+        string? period,
+        int? days,
+        CancellationToken cancellationToken)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(period))
+            query.Add($"period={Uri.EscapeDataString(period.Trim())}");
+
+        if (days != null)
+            query.Add($"days={days.Value}");
+
+        var endpoint = query.Count == 0
+            ? "/admin/stats/rounds"
+            : $"/admin/stats/rounds?{string.Join("&", query)}";
+
+        return GetAsync<GameServerRoundStatsResponse>(server, endpoint, cancellationToken);
+    }
+
     public Task<ApiResult<GameServerPlaytimeAddResponse>> AddPlaytimeAsync(
         GameServerRecord server,
         GameServerActor actor,

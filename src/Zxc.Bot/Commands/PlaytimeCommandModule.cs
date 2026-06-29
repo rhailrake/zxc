@@ -41,7 +41,6 @@ public sealed partial class PlaytimeCommandModule(
                 .WithRequired(true)
                 .WithMinLength(1)
                 .WithMaxLength(32))
-            .AddOption(BuildServerOption())
             .AddOption(BuildJobOption(required: false))
             .AddOption(BuildReasonOption());
 
@@ -49,8 +48,7 @@ public sealed partial class PlaytimeCommandModule(
             .WithName("show")
             .WithDescription("Show player playtime")
             .WithType(ApplicationCommandOptionType.SubCommand)
-            .AddOption(BuildCkeyOption())
-            .AddOption(BuildServerOption());
+            .AddOption(BuildCkeyOption());
 
         var jobs = new SlashCommandOptionBuilder()
             .WithName("jobs")
@@ -62,8 +60,7 @@ public sealed partial class PlaytimeCommandModule(
                 .WithType(ApplicationCommandOptionType.String)
                 .WithRequired(false)
                 .WithMinLength(1)
-                .WithMaxLength(64))
-            .AddOption(BuildServerOption());
+                .WithMaxLength(64));
 
         return new SlashCommandBuilder()
             .WithName(Name)
@@ -106,7 +103,6 @@ public sealed partial class PlaytimeCommandModule(
     {
         return interaction.Data.Current.Name switch
         {
-            "server" => await GetServerAutocompleteAsync(interaction),
             "job" => await GetJobAutocompleteAsync(interaction),
             _ => [],
         };
@@ -186,7 +182,7 @@ public sealed partial class PlaytimeCommandModule(
 
     private async Task HandleJobsAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        var server = await ResolveServerAsync(command, subCommand);
+        var server = await ResolveApiServerAsync(command);
         if (server == null)
             return;
 
@@ -201,21 +197,9 @@ public sealed partial class PlaytimeCommandModule(
         await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatJobs(server.Name, result.Value, query)));
     }
 
-    private async Task<IReadOnlyCollection<AutocompleteResult>> GetServerAutocompleteAsync(SocketAutocompleteInteraction interaction)
-    {
-        var query = interaction.Data.Current.Value?.ToString();
-        var servers = await serverStore.GetServersAsync(CancellationToken.None);
-        return servers
-            .Where(server => Matches(server.Name, query))
-            .OrderBy(server => server.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(25)
-            .Select(server => new AutocompleteResult(server.Name, server.Name))
-            .ToArray();
-    }
-
     private async Task<IReadOnlyCollection<AutocompleteResult>> GetJobAutocompleteAsync(SocketAutocompleteInteraction interaction)
     {
-        var server = await ResolveAutocompleteServerAsync(interaction);
+        var server = await ResolveApiServerAsync();
         if (server == null)
             return [];
 
@@ -232,16 +216,6 @@ public sealed partial class PlaytimeCommandModule(
                 TruncateAutocompleteName($"{job.Name} - {job.PlayTimeTracker}"),
                 job.PlayTimeTracker))
             .ToArray();
-    }
-
-    private async Task<GameServerRecord?> ResolveAutocompleteServerAsync(SocketAutocompleteInteraction interaction)
-    {
-        var serverName = ReadAutocompleteOption(interaction, "server");
-        if (!string.IsNullOrWhiteSpace(serverName))
-            return await serverStore.GetServerAsync(serverName, CancellationToken.None);
-
-        var servers = await serverStore.GetServersAsync(CancellationToken.None);
-        return servers.Count == 1 ? servers.Single() : null;
     }
 
     private async Task<GameServerPlaytimeJobsResponse?> GetJobsAsync(GameServerRecord server, CancellationToken cancellationToken)
@@ -264,7 +238,7 @@ public sealed partial class PlaytimeCommandModule(
         SocketSlashCommand command,
         SocketSlashCommandDataOption subCommand)
     {
-        var server = await ResolveServerAsync(command, subCommand);
+        var server = await ResolveApiServerAsync(command);
         if (server == null)
             return null;
 
@@ -279,34 +253,21 @@ public sealed partial class PlaytimeCommandModule(
         return new PlaytimeCommandContext(server, player.User);
     }
 
-    private async Task<GameServerRecord?> ResolveServerAsync(
-        SocketSlashCommand command,
-        SocketSlashCommandDataOption subCommand)
+    private async Task<GameServerRecord?> ResolveApiServerAsync(SocketSlashCommand command)
     {
-        var serverName = ReadOptionalString(subCommand, "server");
-        if (!string.IsNullOrWhiteSpace(serverName))
-        {
-            var server = await serverStore.GetServerAsync(serverName, CancellationToken.None);
-            if (server != null)
-                return server;
-
-            await CompleteAsync(command, replies.Format(ReplyKind.Empty, $"Server `{serverName}` is not configured."));
-            return null;
-        }
-
         var servers = await serverStore.GetServersAsync(CancellationToken.None);
-        if (servers.Count == 1)
-            return servers.Single();
+        var server = servers.FirstOrDefault();
+        if (server != null)
+            return server;
 
-        if (servers.Count == 0)
-        {
-            await CompleteAsync(command, replies.Format(ReplyKind.Empty, "No servers configured."));
-            return null;
-        }
-
-        var details = "Specify server: " + string.Join(", ", servers.Select(server => InlineCode(server.Name)));
-        await CompleteAsync(command, replies.Format(ReplyKind.Empty, details));
+        await CompleteAsync(command, replies.Format(ReplyKind.Empty, "No servers configured."));
         return null;
+    }
+
+    private async Task<GameServerRecord?> ResolveApiServerAsync()
+    {
+        var servers = await serverStore.GetServersAsync(CancellationToken.None);
+        return servers.FirstOrDefault();
     }
 
     private static bool TryResolveTracker(
@@ -584,18 +545,6 @@ public sealed partial class PlaytimeCommandModule(
             .WithMaxLength(512);
     }
 
-    private static SlashCommandOptionBuilder BuildServerOption()
-    {
-        return new SlashCommandOptionBuilder()
-            .WithName("server")
-            .WithDescription("Configured server name")
-            .WithType(ApplicationCommandOptionType.String)
-            .WithRequired(false)
-            .WithMinLength(1)
-            .WithMaxLength(64)
-            .WithAutocomplete(true);
-    }
-
     private static string ReadString(SocketSlashCommandDataOption subCommand, string optionName)
     {
         var option = subCommand.Options.FirstOrDefault(option => option.Name == optionName)
@@ -608,16 +557,6 @@ public sealed partial class PlaytimeCommandModule(
     private static string? ReadOptionalString(SocketSlashCommandDataOption subCommand, string optionName)
     {
         return subCommand.Options.FirstOrDefault(option => option.Name == optionName)?.Value as string;
-    }
-
-    private static string? ReadAutocompleteOption(SocketAutocompleteInteraction interaction, string optionName)
-    {
-        return interaction.Data.Options.FirstOrDefault(option => option.Name == optionName)?.Value?.ToString();
-    }
-
-    private static string InlineCode(string value)
-    {
-        return $"`{value.Replace('`', '\'')}`";
     }
 
     private static Task CompleteAsync(SocketSlashCommand command, string content)

@@ -29,6 +29,12 @@ public interface IGameServerApiClient
         GameServerRecord server,
         CancellationToken cancellationToken);
 
+    Task<ApiResult<GameServerRoundStatsResponse>> GetRoundStatsAsync(
+        GameServerRecord server,
+        string? period,
+        int? days,
+        CancellationToken cancellationToken);
+
     Task<ApiResult<GameServerPlaytimeAddResponse>> AddPlaytimeAsync(
         GameServerRecord server,
         GameServerActor actor,

@@ -1,3 +1,4 @@
+using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 
@@ -20,9 +21,28 @@ public sealed class SlashCommandRegistrar(
             .Select(module => module.Build())
             .ToArray();
 
-        await client.BulkOverwriteGlobalApplicationCommandsAsync(commands);
+        var guilds = client.Guilds
+            .OrderBy(guild => guild.Id)
+            .ToArray();
+
+        if (guilds.Length == 0)
+        {
+            await client.BulkOverwriteGlobalApplicationCommandsAsync(commands);
+            logger.LogInformation("Registered {CommandCount} global slash commands.", commands.Length);
+        }
+        else
+        {
+            await client.BulkOverwriteGlobalApplicationCommandsAsync(Array.Empty<ApplicationCommandProperties>());
+
+            foreach (var guild in guilds)
+                await guild.BulkOverwriteApplicationCommandAsync(commands);
+
+            logger.LogInformation(
+                "Registered {CommandCount} guild slash commands in {GuildCount} guilds.",
+                commands.Length,
+                guilds.Length);
+        }
 
         _registered = true;
-        logger.LogInformation("Registered {CommandCount} slash commands.", commands.Length);
     }
 }
