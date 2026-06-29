@@ -1,3 +1,4 @@
+using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Zxc.Bot.Replies;
@@ -29,6 +30,12 @@ public sealed class SlashCommandDispatcher
         return Task.CompletedTask;
     }
 
+    public Task HandleAutocompleteAsync(SocketAutocompleteInteraction interaction)
+    {
+        _ = Task.Run(() => HandleAutocompleteInteractionAsync(interaction));
+        return Task.CompletedTask;
+    }
+
     private async Task HandleCommandAsync(SocketSlashCommand command)
     {
         try
@@ -39,7 +46,7 @@ public sealed class SlashCommandDispatcher
                 return;
             }
 
-            if (!await CanExecuteAsync(command, module))
+            if (!await CanExecuteAsync(command.User, module))
             {
                 await command.RespondAsync(_replies.Format(ReplyKind.Denied, "Access denied."), ephemeral: true);
                 return;
@@ -58,12 +65,36 @@ public sealed class SlashCommandDispatcher
         }
     }
 
-    private Task<bool> CanExecuteAsync(SocketSlashCommand command, ISlashCommandModule module)
+    private async Task HandleAutocompleteInteractionAsync(SocketAutocompleteInteraction interaction)
+    {
+        try
+        {
+            if (!_modules.TryGetValue(interaction.Data.CommandName, out var module) ||
+                module is not ISlashCommandAutocompleteModule autocompleteModule ||
+                !await CanExecuteAsync(interaction.User, module))
+            {
+                await interaction.RespondAsync([]);
+                return;
+            }
+
+            var results = await autocompleteModule.GetAutocompleteAsync(interaction);
+            await interaction.RespondAsync(results.Take(25));
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Failed to handle autocomplete for slash command {CommandName}.", interaction.Data.CommandName);
+
+            if (!interaction.HasResponded)
+                await interaction.RespondAsync([]);
+        }
+    }
+
+    private Task<bool> CanExecuteAsync(IUser user, ISlashCommandModule module)
     {
         return module.Access switch
         {
-            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(command.User, module.Name, CancellationToken.None),
-            SlashCommandAccess.Role => _accessService.CanUseAsync(command.User, module.Name, CancellationToken.None),
+            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(user, module.Name, CancellationToken.None),
+            SlashCommandAccess.Role => _accessService.CanUseAsync(user, module.Name, CancellationToken.None),
             _ => Task.FromResult(false),
         };
     }

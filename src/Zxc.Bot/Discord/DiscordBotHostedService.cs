@@ -24,6 +24,7 @@ public sealed class DiscordBotHostedService(
         client.Log += logForwarder.ForwardAsync;
         client.Ready += OnReadyAsync;
         client.SlashCommandExecuted += commandDispatcher.HandleAsync;
+        client.AutocompleteExecuted += commandDispatcher.HandleAutocompleteAsync;
         client.MessageReceived += aiMentionResponder.HandleAsync;
 
         await client.LoginAsync(TokenType.Bot, options.Token);
@@ -33,6 +34,7 @@ public sealed class DiscordBotHostedService(
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         client.SlashCommandExecuted -= commandDispatcher.HandleAsync;
+        client.AutocompleteExecuted -= commandDispatcher.HandleAutocompleteAsync;
         client.MessageReceived -= aiMentionResponder.HandleAsync;
         client.Ready -= OnReadyAsync;
         client.Log -= logForwarder.ForwardAsync;

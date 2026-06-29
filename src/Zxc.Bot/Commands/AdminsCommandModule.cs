@@ -8,7 +8,7 @@ namespace Zxc.Bot.Commands;
 public sealed class AdminsCommandModule(
     IGameServerStore serverStore,
     IGameServerApiClient apiClient,
-    IReplyService replies) : ISlashCommandModule
+    IReplyService replies) : ISlashCommandAutocompleteModule
 {
     private const int DiscordMessageLimit = 1900;
 
@@ -27,8 +27,24 @@ public sealed class AdminsCommandModule(
                 .WithType(ApplicationCommandOptionType.String)
                 .WithRequired(false)
                 .WithMinLength(1)
-                .WithMaxLength(64))
+                .WithMaxLength(64)
+                .WithAutocomplete(true))
             .Build();
+    }
+
+    public async Task<IReadOnlyCollection<AutocompleteResult>> GetAutocompleteAsync(SocketAutocompleteInteraction interaction)
+    {
+        if (interaction.Data.Current.Name != "server")
+            return [];
+
+        var query = interaction.Data.Current.Value?.ToString();
+        var servers = await serverStore.GetServersAsync(CancellationToken.None);
+        return servers
+            .Where(server => Matches(server.Name, query))
+            .OrderBy(server => server.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(25)
+            .Select(server => new AutocompleteResult(server.Name, server.Name))
+            .ToArray();
     }
 
     public async Task HandleAsync(SocketSlashCommand command)
@@ -145,5 +161,11 @@ public sealed class AdminsCommandModule(
     private static Task CompleteAsync(SocketSlashCommand command, string content)
     {
         return command.ModifyOriginalResponseAsync(message => message.Content = content);
+    }
+
+    private static bool Matches(string value, string? query)
+    {
+        return string.IsNullOrWhiteSpace(query) ||
+            value.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }

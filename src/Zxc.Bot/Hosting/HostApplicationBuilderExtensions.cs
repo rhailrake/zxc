@@ -83,6 +83,7 @@ public static class HostApplicationBuilderExtensions
         services.AddSingleton<ISlashCommandModule, BotCommandModule>();
         services.AddSingleton<ISlashCommandModule, RoleCommandModule>();
         services.AddSingleton<ISlashCommandModule, ServerCommandModule>();
+        services.AddSingleton<ISlashCommandModule, PlaytimeCommandModule>();
         services.AddSingleton<ISlashCommandModule, DiscordLookupCommandModule>();
         services.AddSingleton<ISlashCommandModule, DonatorsCommandModule>();
         services.AddSingleton<SlashCommandDispatcher>();

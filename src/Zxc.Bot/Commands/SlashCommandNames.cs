@@ -6,6 +6,7 @@ public static class SlashCommandNames
     public const string Bot = "bot";
     public const string Discord = "discord";
     public const string Donators = "donators";
+    public const string Playtime = "playtime";
     public const string Roles = "roles";
     public const string Servers = "servers";
 
@@ -15,6 +16,7 @@ public static class SlashCommandNames
         Bot,
         Discord,
         Donators,
+        Playtime,
         Roles,
         Servers,
     ];
