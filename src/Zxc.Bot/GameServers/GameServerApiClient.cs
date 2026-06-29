@@ -111,11 +111,14 @@ public sealed class GameServerApiClient(HttpClient httpClient) : IGameServerApiC
             return new ApiResult<TResponse>(response.StatusCode, (TResponse)(object)body, body, null);
 
         if (string.IsNullOrWhiteSpace(body))
-            return new ApiResult<TResponse>(response.StatusCode, default, body, null);
+            return new ApiResult<TResponse>(response.StatusCode, default, body, "Response body was empty.");
 
         try
         {
             var value = JsonSerializer.Deserialize<TResponse>(body, GameServerJson.Options);
+            if (value == null)
+                return new ApiResult<TResponse>(response.StatusCode, default, body, "Response JSON was null.");
+
             return new ApiResult<TResponse>(response.StatusCode, value, body, null);
         }
         catch (JsonException e)

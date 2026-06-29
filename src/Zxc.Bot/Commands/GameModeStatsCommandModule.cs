@@ -75,7 +75,14 @@ public sealed class GameModeStatsCommandModule(
         var result = await apiClient.GetRoundStatsAsync(server, period, days == null ? null : (int)days.Value, CancellationToken.None);
         if (!result.Success || result.Value == null)
         {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to fetch game mode stats from `{server.Name}`. HTTP {(int)result.StatusCode}.\n{TrimError(result.Error)}"));
+            var error = TrimError(result.Error);
+            var details = $"Failed to fetch game mode stats from `{server.Name}`. HTTP {(int)result.StatusCode}.";
+            if (!string.IsNullOrWhiteSpace(error))
+                details += $"\n{error}";
+            else if (result.Value == null)
+                details += "\nResponse body was empty or `null`.";
+
+            await CompleteAsync(command, replies.Format(ReplyKind.Error, details));
             return;
         }
 
@@ -171,9 +178,9 @@ public sealed class GameModeStatsCommandModule(
         return value.ToString("0.##", CultureInfo.InvariantCulture);
     }
 
-    private static string FormatUtc(DateTimeOffset value)
+    private static string FormatUtc(DateTime value)
     {
-        return value.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+        return value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
     }
 
     private static string? ReadOptionalString(SocketSlashCommand command, string optionName)
