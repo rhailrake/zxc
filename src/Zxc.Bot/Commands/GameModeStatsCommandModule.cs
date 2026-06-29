@@ -77,10 +77,18 @@ public sealed class GameModeStatsCommandModule(
         {
             var error = TrimError(result.Error);
             var details = $"Failed to fetch game mode stats from `{server.Name}`. HTTP {(int)result.StatusCode}.";
-            if (!string.IsNullOrWhiteSpace(error))
+            if (string.Equals(error, "Response body was empty.", StringComparison.Ordinal))
+            {
+                details += "\n`/admin/stats/rounds` returned no JSON. The game server build probably does not include the gamemode stats endpoint yet.";
+            }
+            else if (!string.IsNullOrWhiteSpace(error))
+            {
                 details += $"\n{error}";
+            }
             else if (result.Value == null)
+            {
                 details += "\nResponse body was empty or `null`.";
+            }
 
             await CompleteAsync(command, replies.Format(ReplyKind.Error, details));
             return;
