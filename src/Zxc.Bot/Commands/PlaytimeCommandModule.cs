@@ -73,7 +73,7 @@ public sealed partial class PlaytimeCommandModule(
 
     public async Task HandleAsync(SocketSlashCommand command)
     {
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync();
 
         var subCommand = command.Data.Options.FirstOrDefault();
         if (subCommand == null)

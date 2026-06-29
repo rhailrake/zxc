@@ -49,7 +49,7 @@ public sealed class AdminsCommandModule(
 
     public async Task HandleAsync(SocketSlashCommand command)
     {
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync();
 
         var server = await ResolveServerAsync(command);
         if (server == null)

@@ -9,7 +9,7 @@ namespace Zxc.Bot.Commands;
 public sealed class GameModeStatsCommandModule(
     IGameServerStore serverStore,
     IGameServerApiClient apiClient,
-    IReplyService replies) : ISlashCommandModule
+    IReplyService replies) : ISlashCommandAutocompleteModule
 {
     private const int DiscordMessageLimit = 1900;
     private const int MaxRoundStatsDays = 365;
@@ -33,6 +33,7 @@ public sealed class GameModeStatsCommandModule(
         return new SlashCommandBuilder()
             .WithName(Name)
             .WithDescription("Show game mode round statistics")
+            .AddOption(BuildServerOption())
             .AddOption(period)
             .AddOption(new SlashCommandOptionBuilder()
                 .WithName("days")
@@ -44,7 +45,7 @@ public sealed class GameModeStatsCommandModule(
 
     public async Task HandleAsync(SocketSlashCommand command)
     {
-        await command.DeferAsync(ephemeral: true);
+        await command.DeferAsync();
 
         var period = ReadOptionalString(command, "period")?.Trim().ToLowerInvariant();
         var days = ReadOptionalLong(command, "days");
@@ -81,14 +82,46 @@ public sealed class GameModeStatsCommandModule(
         await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatStats(result.Value)));
     }
 
+    public async Task<IReadOnlyCollection<AutocompleteResult>> GetAutocompleteAsync(SocketAutocompleteInteraction interaction)
+    {
+        if (interaction.Data.Current.Name != "server")
+            return [];
+
+        var query = interaction.Data.Current.Value?.ToString();
+        var servers = await serverStore.GetServersAsync(CancellationToken.None);
+        return servers
+            .Where(server => Matches(server.Name, query))
+            .OrderBy(server => server.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(25)
+            .Select(server => new AutocompleteResult(server.Name, server.Name))
+            .ToArray();
+    }
+
     private async Task<GameServerRecord?> ResolveApiServerAsync(SocketSlashCommand command)
     {
-        var servers = await serverStore.GetServersAsync(CancellationToken.None);
-        var server = servers.FirstOrDefault();
-        if (server != null)
-            return server;
+        var serverName = ReadOptionalString(command, "server");
+        if (!string.IsNullOrWhiteSpace(serverName))
+        {
+            var selectedServer = await serverStore.GetServerAsync(serverName, CancellationToken.None);
+            if (selectedServer != null)
+                return selectedServer;
 
-        await CompleteAsync(command, replies.Format(ReplyKind.Empty, "No servers configured."));
+            await CompleteAsync(command, replies.Format(ReplyKind.Empty, $"Server `{serverName}` is not configured."));
+            return null;
+        }
+
+        var servers = await serverStore.GetServersAsync(CancellationToken.None);
+        if (servers.Count == 1)
+            return servers.Single();
+
+        if (servers.Count == 0)
+        {
+            await CompleteAsync(command, replies.Format(ReplyKind.Empty, "No servers configured."));
+            return null;
+        }
+
+        var details = "Specify server: " + string.Join(", ", servers.Select(server => InlineCode(server.Name)));
+        await CompleteAsync(command, replies.Format(ReplyKind.Empty, details));
         return null;
     }
 
@@ -148,6 +181,18 @@ public sealed class GameModeStatsCommandModule(
         return command.Data.Options.FirstOrDefault(option => option.Name == optionName)?.Value as string;
     }
 
+    private static SlashCommandOptionBuilder BuildServerOption()
+    {
+        return new SlashCommandOptionBuilder()
+            .WithName("server")
+            .WithDescription("Configured server name")
+            .WithType(ApplicationCommandOptionType.String)
+            .WithRequired(false)
+            .WithMinLength(1)
+            .WithMaxLength(64)
+            .WithAutocomplete(true);
+    }
+
     private static long? ReadOptionalLong(SocketSlashCommand command, string optionName)
     {
         var value = command.Data.Options.FirstOrDefault(option => option.Name == optionName)?.Value;
@@ -171,6 +216,12 @@ public sealed class GameModeStatsCommandModule(
             return string.Empty;
 
         return error.Length <= 300 ? error : error[..300] + "...";
+    }
+
+    private static bool Matches(string value, string? query)
+    {
+        return string.IsNullOrWhiteSpace(query) ||
+            value.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static Task CompleteAsync(SocketSlashCommand command, string content)
