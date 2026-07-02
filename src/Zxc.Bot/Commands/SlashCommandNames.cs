@@ -42,7 +42,6 @@ public static class SlashCommandNames
         Playtime,
         BuildAccessKey(Playtime, "add"),
         BuildAccessKey(Playtime, "show"),
-        BuildAccessKey(Playtime, "jobs"),
         Roles,
         BuildAccessKey(Roles, "add"),
         BuildAccessKey(Roles, "remove"),

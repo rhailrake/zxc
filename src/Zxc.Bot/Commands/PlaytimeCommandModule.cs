@@ -16,7 +16,6 @@ public sealed partial class PlaytimeCommandModule(
     IGameServerApiClient apiClient,
     IReplyService replies) : ISlashCommandAutocompleteModule
 {
-    private const int DiscordMessageLimit = 1900;
     private const int MaxAddMinutes = 60 * 24 * 365;
     private const string OverallAlias = "overall";
     private readonly SemaphoreSlim _jobsCacheLock = new(1, 1);
@@ -49,24 +48,11 @@ public sealed partial class PlaytimeCommandModule(
             .WithType(ApplicationCommandOptionType.SubCommand)
             .AddOption(BuildCkeyOption());
 
-        var jobs = new SlashCommandOptionBuilder()
-            .WithName("jobs")
-            .WithDescription("Find playtime jobs and trackers")
-            .WithType(ApplicationCommandOptionType.SubCommand)
-            .AddOption(new SlashCommandOptionBuilder()
-                .WithName("query")
-                .WithDescription("Job name, id or tracker")
-                .WithType(ApplicationCommandOptionType.String)
-                .WithRequired(false)
-                .WithMinLength(1)
-                .WithMaxLength(64));
-
         return new SlashCommandBuilder()
             .WithName(Name)
             .WithDescription("Playtime tools")
             .AddOption(add)
             .AddOption(show)
-            .AddOption(jobs)
             .Build();
     }
 
@@ -88,9 +74,6 @@ public sealed partial class PlaytimeCommandModule(
                 return;
             case "show":
                 await HandleShowAsync(command, subCommand);
-                return;
-            case "jobs":
-                await HandleJobsAsync(command, subCommand);
                 return;
             default:
                 await CompleteAsync(command, replies.Format(ReplyKind.Denied));
@@ -177,23 +160,6 @@ public sealed partial class PlaytimeCommandModule(
         }
 
         await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatPlaytime(result.Value)));
-    }
-
-    private async Task HandleJobsAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
-    {
-        var server = await ResolveApiServerAsync(command);
-        if (server == null)
-            return;
-
-        var jobs = await GetJobsAsync(server, CancellationToken.None);
-        if (jobs == null)
-        {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, "Failed to fetch playtime jobs."));
-            return;
-        }
-
-        var query = ReadOptionalString(subCommand, "query")?.Trim();
-        await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatJobs(server.Name, jobs, query)));
     }
 
     private async Task<IReadOnlyCollection<AutocompleteResult>> GetJobAutocompleteAsync(SocketAutocompleteInteraction interaction)
@@ -327,7 +293,7 @@ public sealed partial class PlaytimeCommandModule(
             return false;
         }
 
-        error = $"Job/tracker `{value}` not found. Use `/playtime jobs query:{value}` to search.";
+        error = $"Job/tracker `{value}` not found. Use the `job` autocomplete to search.";
         return false;
     }
 
@@ -373,50 +339,6 @@ public sealed partial class PlaytimeCommandModule(
 
         if (!string.IsNullOrWhiteSpace(response.Reason))
             lines.Add($"Reason: {response.Reason}");
-
-        return string.Join("\n", lines);
-    }
-
-    private static string FormatJobs(
-        string serverName,
-        GameServerPlaytimeJobsResponse response,
-        string? query)
-    {
-        var jobs = response.Jobs.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            var normalized = NormalizeSearch(query);
-            jobs = jobs.Where(job =>
-                NormalizeSearch(job.Id).Contains(normalized, StringComparison.Ordinal) ||
-                NormalizeSearch(job.Name).Contains(normalized, StringComparison.Ordinal) ||
-                NormalizeSearch(job.PlayTimeTracker).Contains(normalized, StringComparison.Ordinal));
-        }
-
-        var lines = new List<string>
-        {
-            $"Playtime jobs on `{serverName}`",
-            $"Overall tracker: `{response.OverallTracker}`",
-        };
-
-        var hiddenCount = 0;
-        foreach (var job in jobs.OrderBy(job => job.Department?.Name).ThenBy(job => job.Name))
-        {
-            var line = FormatJobLine(job);
-            var candidate = string.Join("\n", lines.Append(line));
-            if (candidate.Length > DiscordMessageLimit)
-            {
-                hiddenCount++;
-                continue;
-            }
-
-            lines.Add(line);
-        }
-
-        if (lines.Count == 2)
-            lines.Add("No jobs matched.");
-
-        if (hiddenCount > 0)
-            lines.Add($"+{hiddenCount} more");
 
         return string.Join("\n", lines);
     }

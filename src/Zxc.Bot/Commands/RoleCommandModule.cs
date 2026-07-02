@@ -10,6 +10,8 @@ public sealed class RoleCommandModule(
     CommandAccessService accessService,
     IReplyService replies) : ISlashCommandAutocompleteModule
 {
+    private const int DiscordMessageLimit = 1700;
+
     public string Name => SlashCommandNames.Roles;
 
     public SlashCommandAccess Access => SlashCommandAccess.Manager;
@@ -166,17 +168,39 @@ public sealed class RoleCommandModule(
             return;
         }
 
-        var lines = new List<string>();
-        var accessKeys = await GetAccessKeysAsync(CancellationToken.None);
-        foreach (var commandName in accessKeys)
+        var configured = await roleAccessStore.GetCommandRoleIdsAsync(CancellationToken.None);
+        if (configured.Count == 0)
         {
-            var roleIds = await accessService.GetEffectiveRoleIdsAsync(commandName, CancellationToken.None);
-            var roles = roleIds.Count == 0
-                ? "none"
-                : string.Join(", ", roleIds.Select(roleId => $"<@&{roleId}> (`{roleId}`)"));
-
-            lines.Add($"`/{commandName}`: {roles}");
+            await command.RespondAsync(replies.Format(ReplyKind.Empty, "No command access roles configured."), ephemeral: true);
+            return;
         }
+
+        var lines = new List<string>();
+        var hiddenCount = 0;
+        foreach (var (commandName, roleIds) in configured.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (roleIds.Count == 0)
+                continue;
+
+            var line = $"`/{commandName}`: {FormatInlineRoleIds(roleIds)}";
+            var candidate = string.Join("\n", lines.Append(line));
+            if (candidate.Length > DiscordMessageLimit)
+            {
+                hiddenCount++;
+                continue;
+            }
+
+            lines.Add(line);
+        }
+
+        if (lines.Count == 0)
+        {
+            await command.RespondAsync(replies.Format(ReplyKind.Empty, "No command access roles configured."), ephemeral: true);
+            return;
+        }
+
+        if (hiddenCount > 0)
+            lines.Add($"+{hiddenCount} more");
 
         var allDetails = string.Join("\n", lines);
         await command.RespondAsync(replies.Format(ReplyKind.Success, allDetails), ephemeral: true);
@@ -211,6 +235,14 @@ public sealed class RoleCommandModule(
     private static string FormatRoleIds(IEnumerable<ulong> roleIds)
     {
         return string.Join("\n", roleIds.Select(roleId => $"<@&{roleId}> (`{roleId}`)"));
+    }
+
+    private static string FormatInlineRoleIds(IEnumerable<ulong> roleIds)
+    {
+        return string.Join(", ", roleIds
+            .Distinct()
+            .Order()
+            .Select(roleId => $"<@&{roleId}>"));
     }
 
     private static IRole ReadRole(SocketSlashCommandDataOption subCommand)
