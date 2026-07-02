@@ -172,11 +172,11 @@ public sealed partial class PlaytimeCommandModule(
         var result = await apiClient.GetPlaytimeAsync(context.Server, context.Player.UserId, CancellationToken.None);
         if (!result.Success || result.Value == null)
         {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to fetch playtime from `{context.Server.Name}`. HTTP {(int)result.StatusCode}."));
+            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to fetch playtime. HTTP {(int)result.StatusCode}."));
             return;
         }
 
-        await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatPlaytime(context.Server.Name, result.Value)));
+        await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatPlaytime(result.Value)));
     }
 
     private async Task HandleJobsAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
@@ -331,11 +331,11 @@ public sealed partial class PlaytimeCommandModule(
         return false;
     }
 
-    private static string FormatPlaytime(string serverName, GameServerPlaytimeResponse playtime)
+    private static string FormatPlaytime(GameServerPlaytimeResponse playtime)
     {
         var lines = new List<string>
         {
-            $"`{playtime.Player.UserName}` on `{serverName}`",
+            $"`{playtime.Player.UserName}`",
             $"Overall: {FormatSeconds(playtime.OverallSeconds)}",
         };
 
