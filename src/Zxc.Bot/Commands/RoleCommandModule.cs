@@ -8,7 +8,7 @@ namespace Zxc.Bot.Commands;
 public sealed class RoleCommandModule(
     IRoleAccessStore roleAccessStore,
     CommandAccessService accessService,
-    IReplyService replies) : ISlashCommandModule
+    IReplyService replies) : ISlashCommandAutocompleteModule
 {
     public string Name => SlashCommandNames.Roles;
 
@@ -21,15 +21,6 @@ public sealed class RoleCommandModule(
             .WithDescription("Role")
             .WithType(ApplicationCommandOptionType.Role)
             .WithRequired(true);
-
-        var commandOption = new SlashCommandOptionBuilder()
-            .WithName("command")
-            .WithDescription("Command")
-            .WithType(ApplicationCommandOptionType.String)
-            .WithRequired(true);
-
-        foreach (var commandName in SlashCommandNames.All)
-            commandOption.AddChoice(commandName, commandName);
 
         var add = new SlashCommandOptionBuilder()
             .WithName("add")
@@ -61,16 +52,14 @@ public sealed class RoleCommandModule(
 
         SlashCommandOptionBuilder CloneCommandOption(bool required)
         {
-            var option = new SlashCommandOptionBuilder()
-                .WithName(commandOption.Name)
-                .WithDescription(commandOption.Description)
-                .WithType(commandOption.Type)
-                .WithRequired(required);
-
-            foreach (var commandName in SlashCommandNames.All)
-                option.AddChoice(commandName, commandName);
-
-            return option;
+            return new SlashCommandOptionBuilder()
+                .WithName("command")
+                .WithDescription("Command or subcommand")
+                .WithType(ApplicationCommandOptionType.String)
+                .WithRequired(required)
+                .WithMinLength(1)
+                .WithMaxLength(96)
+                .WithAutocomplete(true);
         }
 
         SlashCommandOptionBuilder CloneRoleOption()
@@ -107,6 +96,20 @@ public sealed class RoleCommandModule(
                 await command.RespondAsync(replies.Format(ReplyKind.Denied, "Unknown roles command."), ephemeral: true);
                 return;
         }
+    }
+
+    public async Task<IReadOnlyCollection<AutocompleteResult>> GetAutocompleteAsync(SocketAutocompleteInteraction interaction)
+    {
+        if (interaction.Data.Current.Name != "command")
+            return [];
+
+        var query = interaction.Data.Current.Value?.ToString();
+        var accessKeys = await GetAccessKeysAsync(CancellationToken.None);
+        return accessKeys
+            .Where(key => Matches(key, query))
+            .Take(25)
+            .Select(key => new AutocompleteResult($"/{key}", key))
+            .ToArray();
     }
 
     private async Task HandleAddAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
@@ -164,7 +167,8 @@ public sealed class RoleCommandModule(
         }
 
         var lines = new List<string>();
-        foreach (var commandName in SlashCommandNames.All)
+        var accessKeys = await GetAccessKeysAsync(CancellationToken.None);
+        foreach (var commandName in accessKeys)
         {
             var roleIds = await accessService.GetEffectiveRoleIdsAsync(commandName, CancellationToken.None);
             var roles = roleIds.Count == 0
@@ -181,11 +185,27 @@ public sealed class RoleCommandModule(
     private static bool TryReadCommandName(SocketSlashCommandDataOption subCommand, out string commandName)
     {
         var option = subCommand.Options.FirstOrDefault(option => option.Name == "command");
-        if (option?.Value is string raw && SlashCommandNames.TryNormalize(raw, out commandName))
+        if (option?.Value is string raw && SlashCommandNames.TryNormalizeAccessKey(raw, out commandName))
             return true;
 
         commandName = string.Empty;
         return false;
+    }
+
+    private async Task<IReadOnlyList<string>> GetAccessKeysAsync(CancellationToken cancellationToken)
+    {
+        var stored = await roleAccessStore.GetCommandRoleIdsAsync(cancellationToken);
+        return SlashCommandNames.AllAccessKeys
+            .Concat(stored.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool Matches(string value, string? query)
+    {
+        return string.IsNullOrWhiteSpace(query) ||
+            value.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FormatRoleIds(IEnumerable<ulong> roleIds)

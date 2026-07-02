@@ -46,7 +46,8 @@ public sealed class SlashCommandDispatcher
                 return;
             }
 
-            if (!await CanExecuteAsync(command.User, module))
+            var accessKey = GetAccessKey(command);
+            if (!await CanExecuteAsync(command.User, module, accessKey))
             {
                 await command.RespondAsync(_replies.Format(ReplyKind.Denied, "Access denied."), ephemeral: true);
                 return;
@@ -71,7 +72,7 @@ public sealed class SlashCommandDispatcher
         {
             if (!_modules.TryGetValue(interaction.Data.CommandName, out var module) ||
                 module is not ISlashCommandAutocompleteModule autocompleteModule ||
-                !await CanExecuteAsync(interaction.User, module))
+                !await CanAutocompleteAsync(interaction.User, module))
             {
                 await interaction.RespondAsync([]);
                 return;
@@ -89,13 +90,43 @@ public sealed class SlashCommandDispatcher
         }
     }
 
-    private Task<bool> CanExecuteAsync(IUser user, ISlashCommandModule module)
+    private Task<bool> CanExecuteAsync(IUser user, ISlashCommandModule module, string accessKey)
     {
         return module.Access switch
         {
-            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(user, module.Name, CancellationToken.None),
-            SlashCommandAccess.Role => _accessService.CanUseAsync(user, module.Name, CancellationToken.None),
+            SlashCommandAccess.Manager => _accessService.CanManageAccessAsync(user, accessKey, CancellationToken.None),
+            SlashCommandAccess.Role => _accessService.CanUseAsync(user, accessKey, CancellationToken.None),
             _ => Task.FromResult(false),
         };
+    }
+
+    private Task<bool> CanAutocompleteAsync(IUser user, ISlashCommandModule module)
+    {
+        return module.Access switch
+        {
+            SlashCommandAccess.Manager => _accessService.CanManageAnyAsync(user, module.Name, CancellationToken.None),
+            SlashCommandAccess.Role => _accessService.CanUseAnyAsync(user, module.Name, CancellationToken.None),
+            _ => Task.FromResult(false),
+        };
+    }
+
+    private static string GetAccessKey(SocketSlashCommand command)
+    {
+        var parts = new List<string> { command.CommandName };
+        var option = command.Data.Options.FirstOrDefault();
+
+        if (option?.Type == ApplicationCommandOptionType.SubCommand)
+        {
+            parts.Add(option.Name);
+        }
+        else if (option?.Type == ApplicationCommandOptionType.SubCommandGroup)
+        {
+            parts.Add(option.Name);
+            var subCommand = option.Options.FirstOrDefault();
+            if (subCommand?.Type == ApplicationCommandOptionType.SubCommand)
+                parts.Add(subCommand.Name);
+        }
+
+        return SlashCommandNames.BuildAccessKey(parts.ToArray());
     }
 }

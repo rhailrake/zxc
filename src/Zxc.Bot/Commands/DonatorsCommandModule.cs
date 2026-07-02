@@ -10,7 +10,6 @@ namespace Zxc.Bot.Commands;
 public sealed class DonatorsCommandModule(
     IDonatorRoleStore donatorRoleStore,
     IPlayerDiscordLookupService lookupService,
-    CommandAccessService accessService,
     IReplyService replies) : ISlashCommandModule
 {
     private const int DiscordEmbedDescriptionLimit = 4096;
@@ -104,12 +103,6 @@ public sealed class DonatorsCommandModule(
 
     private async Task HandleAddRoleAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        if (!await accessService.CanManageAccessAsync(command.User, Name, CancellationToken.None))
-        {
-            await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
-            return;
-        }
-
         var roleId = ReadRoleId(subCommand);
         if (command.Channel is not SocketGuildChannel guildChannel || guildChannel.Guild.GetRole(roleId) == null)
         {
@@ -127,12 +120,6 @@ public sealed class DonatorsCommandModule(
 
     private async Task HandleRemoveRoleAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
     {
-        if (!await accessService.CanManageAccessAsync(command.User, Name, CancellationToken.None))
-        {
-            await command.RespondAsync(replies.Format(ReplyKind.Denied), ephemeral: true);
-            return;
-        }
-
         var roleId = ReadRoleId(subCommand);
         var removed = await donatorRoleStore.RemoveRoleAsync(roleId, CancellationToken.None);
         var details = removed

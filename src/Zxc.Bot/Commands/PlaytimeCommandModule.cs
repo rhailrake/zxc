@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,8 +19,8 @@ public sealed partial class PlaytimeCommandModule(
     private const int DiscordMessageLimit = 1900;
     private const int MaxAddMinutes = 60 * 24 * 365;
     private const string OverallAlias = "overall";
-    private static readonly TimeSpan JobsCacheDuration = TimeSpan.FromMinutes(5);
-    private readonly ConcurrentDictionary<string, CachedJobs> _jobsCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _jobsCacheLock = new(1, 1);
+    private GameServerPlaytimeJobsResponse? _jobsCache;
 
     public string Name => SlashCommandNames.Playtime;
 
@@ -132,7 +131,7 @@ public sealed partial class PlaytimeCommandModule(
         var jobs = await GetJobsAsync(context.Server, CancellationToken.None);
         if (jobs == null)
         {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to fetch playtime jobs from `{context.Server.Name}`."));
+            await CompleteAsync(command, replies.Format(ReplyKind.Error, "Failed to fetch playtime jobs."));
             return;
         }
 
@@ -155,13 +154,13 @@ public sealed partial class PlaytimeCommandModule(
         var result = await apiClient.AddPlaytimeAsync(context.Server, actor, request, CancellationToken.None);
         if (!result.Success || result.Value == null)
         {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to add playtime on `{context.Server.Name}`. HTTP {(int)result.StatusCode}.\n{TrimError(result.Error)}"));
+            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to add playtime. HTTP {(int)result.StatusCode}.\n{TrimError(result.Error)}"));
             return;
         }
 
         await CompleteAsync(command, replies.Format(
             ReplyKind.Success,
-            FormatAddResult(context.Server.Name, result.Value, trackerLabel)));
+            FormatAddResult(result.Value, trackerLabel)));
     }
 
     private async Task HandleShowAsync(SocketSlashCommand command, SocketSlashCommandDataOption subCommand)
@@ -186,15 +185,15 @@ public sealed partial class PlaytimeCommandModule(
         if (server == null)
             return;
 
-        var result = await apiClient.GetPlaytimeJobsAsync(server, CancellationToken.None);
-        if (!result.Success || result.Value == null)
+        var jobs = await GetJobsAsync(server, CancellationToken.None);
+        if (jobs == null)
         {
-            await CompleteAsync(command, replies.Format(ReplyKind.Error, $"Failed to fetch playtime jobs from `{server.Name}`. HTTP {(int)result.StatusCode}."));
+            await CompleteAsync(command, replies.Format(ReplyKind.Error, "Failed to fetch playtime jobs."));
             return;
         }
 
         var query = ReadOptionalString(subCommand, "query")?.Trim();
-        await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatJobs(server.Name, result.Value, query)));
+        await CompleteAsync(command, replies.Format(ReplyKind.Success, FormatJobs(server.Name, jobs, query)));
     }
 
     private async Task<IReadOnlyCollection<AutocompleteResult>> GetJobAutocompleteAsync(SocketAutocompleteInteraction interaction)
@@ -220,18 +219,26 @@ public sealed partial class PlaytimeCommandModule(
 
     private async Task<GameServerPlaytimeJobsResponse?> GetJobsAsync(GameServerRecord server, CancellationToken cancellationToken)
     {
-        if (_jobsCache.TryGetValue(server.Name, out var cached) &&
-            cached.ExpiresAt > DateTimeOffset.UtcNow)
+        if (_jobsCache != null)
+            return _jobsCache;
+
+        await _jobsCacheLock.WaitAsync(cancellationToken);
+        try
         {
-            return cached.Response;
+            if (_jobsCache != null)
+                return _jobsCache;
+
+            var result = await apiClient.GetPlaytimeJobsAsync(server, cancellationToken);
+            if (!result.Success || result.Value == null)
+                return null;
+
+            _jobsCache = result.Value;
+            return _jobsCache;
         }
-
-        var result = await apiClient.GetPlaytimeJobsAsync(server, cancellationToken);
-        if (!result.Success || result.Value == null)
-            return null;
-
-        _jobsCache[server.Name] = new CachedJobs(result.Value, DateTimeOffset.UtcNow + JobsCacheDuration);
-        return result.Value;
+        finally
+        {
+            _jobsCacheLock.Release();
+        }
     }
 
     private async Task<PlaytimeCommandContext?> BuildContextAsync(
@@ -348,14 +355,11 @@ public sealed partial class PlaytimeCommandModule(
         return string.Join("\n", lines);
     }
 
-    private static string FormatAddResult(
-        string serverName,
-        GameServerPlaytimeAddResponse response,
-        string trackerLabel)
+    private static string FormatAddResult(GameServerPlaytimeAddResponse response, string trackerLabel)
     {
         var lines = new List<string>
         {
-            $"Added playtime on `{serverName}`",
+            "Added playtime",
             $"Player: `{response.Player.UserName}` (`{response.Player.UserId}`)",
             $"Tracker: {trackerLabel}",
         };
@@ -582,7 +586,4 @@ public sealed partial class PlaytimeCommandModule(
         GameServerRecord Server,
         AuthUserInfo Player);
 
-    private sealed record CachedJobs(
-        GameServerPlaytimeJobsResponse Response,
-        DateTimeOffset ExpiresAt);
 }

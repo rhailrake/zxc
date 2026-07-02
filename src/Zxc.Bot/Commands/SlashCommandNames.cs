@@ -23,6 +23,36 @@ public static class SlashCommandNames
         Servers,
     ];
 
+    public static readonly IReadOnlyList<string> AllAccessKeys =
+    [
+        Admins,
+        Bot,
+        BuildAccessKey(Bot, "version"),
+        BuildAccessKey(Bot, "update"),
+        BuildAccessKey(Bot, "restart"),
+        Discord,
+        BuildAccessKey(Discord, "find"),
+        BuildAccessKey(Discord, "ckey"),
+        Donators,
+        BuildAccessKey(Donators, "add-role"),
+        BuildAccessKey(Donators, "remove-role"),
+        BuildAccessKey(Donators, "roles"),
+        BuildAccessKey(Donators, "list"),
+        Gamemodes,
+        Playtime,
+        BuildAccessKey(Playtime, "add"),
+        BuildAccessKey(Playtime, "show"),
+        BuildAccessKey(Playtime, "jobs"),
+        Roles,
+        BuildAccessKey(Roles, "add"),
+        BuildAccessKey(Roles, "remove"),
+        BuildAccessKey(Roles, "list"),
+        Servers,
+        BuildAccessKey(Servers, "add"),
+        BuildAccessKey(Servers, "remove"),
+        BuildAccessKey(Servers, "list"),
+    ];
+
     public static bool TryNormalize(string commandName, out string normalized)
     {
         foreach (var known in All)
@@ -36,5 +66,48 @@ public static class SlashCommandNames
 
         normalized = string.Empty;
         return false;
+    }
+
+    public static bool TryNormalizeAccessKey(string value, out string normalized)
+    {
+        var key = NormalizeAccessKey(value);
+        foreach (var known in AllAccessKeys)
+        {
+            if (string.Equals(known, key, StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = known;
+                return true;
+            }
+        }
+
+        normalized = string.Empty;
+        return false;
+    }
+
+    public static string BuildAccessKey(params string[] parts)
+    {
+        return string.Join(" ", parts
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part.Trim().ToLowerInvariant()));
+    }
+
+    public static IReadOnlyList<string> GetParentAccessKeys(string accessKey)
+    {
+        accessKey = NormalizeAccessKey(accessKey);
+        var parts = accessKey.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var keys = new List<string>();
+        for (var length = parts.Length; length >= 1; length--)
+            keys.Add(string.Join(" ", parts.Take(length)));
+
+        return keys;
+    }
+
+    private static string NormalizeAccessKey(string value)
+    {
+        value = value.Trim().TrimStart('/');
+        value = value.Replace('/', ' ').Replace(':', ' ');
+        return string.Join(" ", value
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => part.ToLowerInvariant()));
     }
 }
